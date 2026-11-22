@@ -2,11 +2,15 @@ import { Clock, Heart, MapPin, Sprout, Truck } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import FoodImage from '../ui/FoodImage.jsx'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 export default function Hero() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
 
-  const openDonate = () => navigate('/dashboard/donor/add')
+  const openDonate = () => navigate(
+    isAuthenticated ? '/dashboard/donor/add' : '/donate',
+  )
 
   const scrollToFood = () => {
     document.getElementById('available-food')?.scrollIntoView({ behavior: 'smooth' })

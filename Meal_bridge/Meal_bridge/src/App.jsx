@@ -54,6 +54,14 @@ export default function App() {
         <Routes>
           <Route element={<SiteLayout />}>
             <Route index element={<LandingPage />} />
+            <Route
+              path="donate"
+              element={
+                <DonorProvider>
+                  <AddFoodPage publicEntry />
+                </DonorProvider>
+              }
+            />
             <Route path="register" element={<RoleSelectionPage />} />
             <Route path="register/:role" element={<RegisterPage />} />
             <Route path="login" element={<LoginPage />} />

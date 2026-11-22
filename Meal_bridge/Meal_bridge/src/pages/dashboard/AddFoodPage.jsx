@@ -5,7 +5,9 @@ import PageHeader from '../../components/dashboard/PageHeader.jsx'
 import Button from '../../components/ui/Button.jsx'
 import FoodImage from '../../components/ui/FoodImage.jsx'
 import { useDonor } from '../../context/DonorContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { ALLERGEN_OPTIONS } from '../../lib/allergens.js'
+import { isSupabaseConfigured } from '../../lib/supabase.js'
 import {
   LISTING_CATEGORIES,
   LISTING_STORAGE_CONDITIONS,
@@ -121,9 +123,11 @@ function Field({ id, label, error, className = '', children }) {
   )
 }
 
-export default function AddFoodPage() {
+export default function AddFoodPage({ publicEntry = false }) {
   const routeLocation = useLocation()
   const { addDonation, updateDonation, profile } = useDonor()
+  const { isAuthenticated, loading: authLoading } = useAuth()
+  const needsAuthentication = isSupabaseConfigured && !isAuthenticated && !authLoading
 
   const donation = routeLocation.state?.donation ?? null
   const isEditing = Boolean(donation)
@@ -198,6 +202,10 @@ export default function AddFoodPage() {
     if (!editable || submittingRef.current) return
 
     setFormError('')
+    if (publicEntry && isSupabaseConfigured && !isAuthenticated) {
+      setFormError('Log in or register as a food donor to post this listing.')
+      return
+    }
     const nextErrors = validateFoodListing(values)
     setErrors(nextErrors)
 
@@ -251,14 +259,24 @@ export default function AddFoodPage() {
     }
   }
 
-  const title = isEditing ? 'Edit listing' : 'Add food'
+  const title = isEditing ? 'Edit listing' : publicEntry ? 'Donate surplus food' : 'Add food'
   const description = isEditing
     ? 'Update the details of this food listing.'
-    : 'Post surplus food in under a minute. NGOs and volunteers nearby will see it.'
+    : 'Share food details, quantity and pickup time so nearby organizations can collect it.'
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title={title} description={description} />
+
+      {publicEntry && needsAuthentication && (
+        <div className="mb-6 rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800">
+          You can fill in the donation details now. Log in or register as a donor before posting.
+          <div className="mt-3 flex gap-4 font-semibold">
+            <Link to="/login" className="underline underline-offset-2">Log in</Link>
+            <Link to="/register/donor" className="underline underline-offset-2">Create donor account</Link>
+          </div>
+        </div>
+      )}
 
       {!editable && (
         <div
@@ -536,10 +554,10 @@ export default function AddFoodPage() {
 
         <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Link
-            to={DONATIONS_PATH}
+            to={publicEntry ? '/' : DONATIONS_PATH}
             className="inline-flex items-center justify-center rounded-full border border-stone-300 bg-white px-5 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
           >
-            Cancel
+            {publicEntry ? 'Back to home' : 'Cancel'}
           </Link>
           <Button
             type="submit"
@@ -575,14 +593,16 @@ export default function AddFoodPage() {
           </p>
           <p className="mt-4 rounded-xl bg-white p-3 text-xs text-stone-600">{DISCLAIMER}</p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            {!publicEntry && (
+              <Link
+                to={DONATIONS_PATH}
+                className="inline-flex items-center justify-center rounded-full border border-stone-300 bg-white px-5 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+              >
+                View my donations
+              </Link>
+            )}
             <Link
-              to={DONATIONS_PATH}
-              className="inline-flex items-center justify-center rounded-full border border-stone-300 bg-white px-5 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
-            >
-              View my donations
-            </Link>
-            <Link
-              to="/dashboard/donor/add"
+              to={publicEntry ? '/donate' : '/dashboard/donor/add'}
               className="inline-flex items-center justify-center rounded-full border border-primary-600 bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
             >
               Post another listing
