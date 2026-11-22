@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Meal_bridge/Meal_bridge/package-lock.json
+      - working-directory: Meal_bridge/Meal_bridge
+        run: npm ci
+      - working-directory: Meal_bridge/Meal_bridge
+        run: npm test
+      - working-directory: Meal_bridge/Meal_bridge
+        run: npm run build

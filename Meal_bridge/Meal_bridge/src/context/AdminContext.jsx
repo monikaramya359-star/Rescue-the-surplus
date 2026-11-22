@@ -1,6 +1,7 @@
 // Local mock state only. Replace these actions with Supabase queries and mutations without changing consumers.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { seedUsers, seedAdminListings, seedAdminPickups } from '../data/adminData.js'
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js'
 
 const AdminContext = createContext(null)
 
@@ -14,12 +15,58 @@ export function getEffectiveListingStatus(listing, now) {
 export function AdminProvider({ children }) {
   const [users, setUsers] = useState(seedUsers)
   const [listings, setListings] = useState(seedAdminListings)
-  const [pickups] = useState(seedAdminPickups)
+  const [pickups, setPickups] = useState(seedAdminPickups)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+    let active = true
+    Promise.all([
+      supabase.from('users').select('id,role,email,phone,location,account_status,created_at'),
+      supabase.from('food_listings').select('*').order('created_at', { ascending: false }),
+      supabase.from('pickup_tasks').select('*, food_claims(*, food_listings(*))').order('created_at', { ascending: false }),
+    ]).then(([userResult, listingResult, pickupResult]) => {
+      if (!active) return
+      if (userResult.data) {
+        setUsers(userResult.data.map((user) => ({
+          id: user.id,
+          name: user.email,
+          email: user.email,
+          role: user.role,
+          status: user.account_status,
+          joined: user.created_at?.slice(0, 10),
+        })))
+      } else {
+        console.warn('[AdminContext] Supabase users query failed:', userResult.error)
+      }
+      if (listingResult.data) {
+        setListings(listingResult.data.map((listing) => ({
+          id: listing.id,
+          foodName: listing.food_name,
+          quantity: listing.quantity,
+          unit: listing.unit,
+          status: listing.status,
+          pickupDeadline: listing.pickup_deadline,
+        })))
+      } else {
+        console.warn('[AdminContext] Supabase food_listings query failed:', listingResult.error)
+      }
+      if (pickupResult.data) {
+        setPickups(pickupResult.data.map((task) => ({
+          id: task.id,
+          status: task.status,
+          pickupDeadline: task.food_claims?.food_listings?.pickup_deadline,
+        })))
+      } else {
+        console.warn('[AdminContext] Supabase pickup_tasks query failed:', pickupResult.error)
+      }
+    })
+    return () => { active = false }
   }, [])
 
   const listingsWithStatus = useMemo(
@@ -58,6 +105,16 @@ export function AdminProvider({ children }) {
   }, [users, listingsWithStatus, pickups])
 
   const toggleUserStatus = useCallback((userId) => {
+    if (isSupabaseConfigured) {
+      const user = users.find((item) => item.id === userId)
+      const nextStatus = user?.status === 'Suspended' ? 'Active' : 'Suspended'
+      return supabase.rpc('admin_set_account_status', {
+        p_user_id: userId,
+        p_status: nextStatus,
+      }).then(({ error }) => error
+        ? { ok: false, error: error.message }
+        : { ok: true })
+    }
     setUsers((prev) =>
       prev.map((user) => {
         if (user.id !== userId) return user
@@ -69,7 +126,13 @@ export function AdminProvider({ children }) {
   }, [])
 
   const cancelListing = useCallback(
-    (listingId) => {
+    async (listingId) => {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.rpc('admin_cancel_listing', {
+          p_listing_id: listingId,
+        })
+        return error ? { ok: false, error: error.message } : { ok: true }
+      }
       const listing = listings.find((item) => item.id === listingId)
       const effective = listing ? getEffectiveListingStatus(listing, Date.now()) : null
       if (effective !== 'Active' && effective !== 'Claimed') {

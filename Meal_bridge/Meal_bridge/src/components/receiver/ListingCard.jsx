@@ -4,6 +4,8 @@ import FoodImage from '../ui/FoodImage'
 import { formatDateTime, formatQuantity } from '../../lib/formatters'
 import ReceiverStatusBadge from './ReceiverStatusBadge'
 import DeadlineWarning from './DeadlineWarning'
+import SafetyHandlingBlock from '../SafetyHandlingBlock.jsx'
+import { allergenLabels } from '../../lib/allergens.js'
 
 export default function ListingCard({ listing, now, onView, onClaim }) {
   const isClaimable = listing.status === 'Available'
@@ -38,7 +40,9 @@ export default function ListingCard({ listing, now, onView, onClaim }) {
           <div className="flex items-start justify-between gap-4 py-2">
             <dt className="text-stone-500">Distance</dt>
             <dd className="text-right text-stone-900">
-              {listing.distanceKm == null ? 'Distance unavailable' : `${listing.distanceKm.toFixed(1)} km away`}
+              {listing.match?.distanceKm == null
+                ? 'Approximate distance unavailable'
+                : `Approximately ${listing.match.distanceKm.toFixed(1)} km away`}
             </dd>
           </div>
           <div className="flex items-start justify-between gap-4 py-2">
@@ -53,16 +57,36 @@ export default function ListingCard({ listing, now, onView, onClaim }) {
           </div>
           <div className="flex items-start justify-between gap-4 py-2">
             <dt className="text-stone-500">Allergens</dt>
-            <dd className="text-right text-stone-900">{listing.allergens}</dd>
+            <dd className="text-right text-stone-900">
+              {allergenLabels(listing.allergens).join(', ') || 'None declared'}
+            </dd>
           </div>
         </dl>
 
         <div className="mt-4">
           <DeadlineWarning deadline={listing.pickupDeadline} now={now} />
         </div>
+        <div className="mt-4">
+          <SafetyHandlingBlock listing={listing} now={now} compact />
+        </div>
+        {listing.match?.reasons && (
+          <p className="mt-3 text-xs font-medium text-primary-800">
+            Why matched: {listing.match.reasons.join(' • ')}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 p-5 pt-0 sm:flex-row">
+        {listing.pickupLocation && (
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.pickupLocation)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center rounded-full border border-primary-600 px-5 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-50 sm:w-auto"
+          >
+            Open map
+          </a>
+        )}
         <Button
           variant="outline"
           type="button"

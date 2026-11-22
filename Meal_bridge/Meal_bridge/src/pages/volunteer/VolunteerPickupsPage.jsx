@@ -10,9 +10,9 @@ export default function VolunteerPickupsPage() {
   const { pickups, acceptPickup } = useVolunteer()
   const [actionError, setActionError] = useState(null)
 
-  function handleAccept(pickup) {
+  async function handleAccept(pickup) {
     setActionError(null)
-    const result = acceptPickup(pickup.id)
+    const result = await acceptPickup(pickup.id)
     if (result && !result.ok) {
       setActionError({ pickupId: pickup.id, message: result.error || 'Could not accept this pickup.' })
     }

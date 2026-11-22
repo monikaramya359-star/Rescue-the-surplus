@@ -17,11 +17,11 @@ export default function VolunteerTasksPage() {
     Collected: { label: 'Mark delivered', run: markDelivered },
   }
 
-  function runTaskAction(task, run) {
+  async function runTaskAction(task, run) {
     setPendingId(task.id)
     setActionError(null)
     try {
-      const result = run(task.id)
+      const result = await run(task.id)
       if (result && !result.ok) {
         setActionError({ taskId: task.id, message: result.error || 'Could not update this task. Try again.' })
       }

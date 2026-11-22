@@ -6,6 +6,7 @@ import DeadlineWarning from './DeadlineWarning.jsx'
 import ReceiverStatusBadge from './ReceiverStatusBadge.jsx'
 import { formatDateTime, formatQuantity } from '../../lib/formatters.js'
 import { useReceiver } from '../../context/ReceiverContext.jsx'
+import SafetyHandlingBlock from '../SafetyHandlingBlock.jsx'
 
 function allergenText(value) {
   if (Array.isArray(value)) return value.length ? value.join(', ') : 'None listed'
@@ -70,6 +71,7 @@ export default function DonationDetailsModal({ listing, open, onClose, onClaim }
           </dl>
 
           <DeadlineWarning deadline={listing.pickupDeadline} now={now} />
+          <SafetyHandlingBlock listing={listing} now={now} />
         </div>
       )}
 

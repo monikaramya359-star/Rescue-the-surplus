@@ -4,13 +4,11 @@ import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
 import FoodImage from '../ui/FoodImage.jsx'
 import DeadlineWarning from './DeadlineWarning.jsx'
+import SafetyHandlingBlock from '../SafetyHandlingBlock.jsx'
 import { formatQuantity } from '../../lib/formatters.js'
+import { allergenLabels } from '../../lib/allergens.js'
+import { SAFETY_DISCLAIMER } from '../../lib/handlingGuidance.js'
 import { getDeadlineState, useReceiver } from '../../context/ReceiverContext.jsx'
-
-function allergenText(value) {
-  if (Array.isArray(value)) return value.length ? value.join(', ') : 'None listed'
-  return value || 'None listed'
-}
 
 export default function ClaimModal({ listing, open, onClose, onClaimed }) {
   const { claimFood, now } = useReceiver()
@@ -42,14 +40,21 @@ export default function ClaimModal({ listing, open, onClose, onClaimed }) {
     setClaimError('')
   }
 
-  const handleConfirm = () => {
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleConfirm = async () => {
     if (!canConfirm) return
-    const result = claimFood(listing.id, numericQuantity)
-    if (result.ok) {
-      onClaimed(result.claim)
-      onClose()
-    } else {
-      setClaimError(result.error)
+    setSubmitting(true)
+    try {
+      const result = await claimFood(listing.id, numericQuantity)
+      if (result.ok) {
+        onClaimed(result.claim)
+        onClose()
+      } else {
+        setClaimError(result.error)
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -80,7 +85,9 @@ export default function ClaimModal({ listing, open, onClose, onClaimed }) {
             </div>
             <div>
               <dt className="font-semibold text-stone-800">Allergens</dt>
-              <dd className="text-stone-600">{allergenText(listing.allergens)}</dd>
+              <dd className="text-stone-600">
+                {allergenLabels(listing.allergens).join(', ') || 'None declared'}
+              </dd>
             </div>
             <div className="col-span-2">
               <dt className="font-semibold text-stone-800">Available</dt>
@@ -89,6 +96,7 @@ export default function ClaimModal({ listing, open, onClose, onClaimed }) {
           </dl>
 
           <DeadlineWarning deadline={listing.pickupDeadline} now={now} />
+          <SafetyHandlingBlock listing={listing} now={now} />
 
           <div>
             <label htmlFor="claim-quantity" className="block text-sm font-semibold text-stone-800">
@@ -117,6 +125,8 @@ export default function ClaimModal({ listing, open, onClose, onClaimed }) {
             Pickup must happen before the deadline. You can track collection and delivery under My
             Claims.
           </p>
+
+          <p className="text-xs text-stone-600">{SAFETY_DISCLAIMER}</p>
         </div>
       )}
 
@@ -134,10 +144,10 @@ export default function ClaimModal({ listing, open, onClose, onClaimed }) {
           type="button"
           icon={CheckCircle2}
           onClick={handleConfirm}
-          disabled={!canConfirm}
+          disabled={!canConfirm || submitting}
           className="w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
-          Confirm claim
+          {submitting ? 'Claiming...' : 'Confirm claim'}
         </Button>
       </div>
     </Modal>

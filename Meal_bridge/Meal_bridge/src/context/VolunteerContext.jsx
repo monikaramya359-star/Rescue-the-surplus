@@ -13,6 +13,16 @@ import {
   subscribe,
   subscribeNotifications,
 } from '../lib/demoStore.js'
+import { isSupabaseConfigured } from '../lib/supabase.js'
+import {
+  acceptPickup as acceptPickupTask,
+  advancePickup,
+  getVolunteerTasks,
+  getNotifications,
+  markNotificationRead as markStoreNotificationReadInDb,
+  markAllNotificationsRead as markAllStoreNotificationsReadInDb,
+  normalizeTask,
+} from '../services/mealService.js'
 
 const VolunteerContext = createContext(null)
 
@@ -24,16 +34,23 @@ export function VolunteerProvider({ children }) {
   const demoState = useSyncExternalStore(subscribe, getState)
   const notificationState = useSyncExternalStore(subscribeNotifications, getState)
   const [profile, setProfile] = useState(volunteerProfile)
+  const [supabasePickups, setSupabasePickups] = useState(null)
+  const [supabaseTasks, setSupabaseTasks] = useState(null)
+  const [supabaseNotifications, setSupabaseNotifications] = useState(null)
   const [now, setNow] = useState(() => Date.now())
   // Unassigned pickups waiting to be accepted.
   const pickups = useMemo(
-    () => demoState.tasks.filter((task) => task.status === 'Claimed' && !task.volunteerId),
-    [demoState.tasks],
+    () => isSupabaseConfigured && supabasePickups
+      ? supabasePickups
+      : demoState.tasks.filter((task) => task.status === 'Claimed' && !task.volunteerId),
+    [demoState.tasks, supabasePickups],
   )
   // Tasks this volunteer has accepted.
   const tasks = useMemo(
-    () => demoState.tasks.filter((task) => task.volunteerId === profile.id),
-    [demoState.tasks, profile.id],
+    () => isSupabaseConfigured && supabaseTasks
+      ? supabaseTasks
+      : demoState.tasks.filter((task) => task.volunteerId === profile.id),
+    [demoState.tasks, profile.id, supabaseTasks],
   )
 
   useEffect(() => {
@@ -45,11 +62,37 @@ export function VolunteerProvider({ children }) {
     checkDeadlines()
   }, [])
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+    let active = true
+    async function refresh() {
+      const [tasksResult, notificationsResult] = await Promise.all([getVolunteerTasks(), getNotifications()])
+      if (!active) return
+      if (tasksResult.ok && tasksResult.data) {
+        const tasks = tasksResult.data.map(normalizeTask)
+        setSupabasePickups(tasks.filter((task) => task.status === 'Claimed' && !task.volunteerId))
+        setSupabaseTasks(tasks.filter((task) => task.volunteerId))
+      }
+      if (notificationsResult.ok && notificationsResult.data) setSupabaseNotifications(notificationsResult.data)
+    }
+    refresh()
+    const timer = setInterval(refresh, 12000)
+    return () => { active = false; clearInterval(timer) }
+  }, [])
+
   // Notifications come from the store, already limited to this volunteer.
-  const notifications = useMemo(
-    () => getNotificationsFor(DEMO_VOLUNTEER_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) })),
-    [notificationState],
-  )
+  const notifications = useMemo(() => {
+    if (isSupabaseConfigured && supabaseNotifications) {
+      return supabaseNotifications.map((n) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        read: n.is_read,
+        time: formatNotificationTime(n.created_at),
+      }))
+    }
+    return getNotificationsFor(DEMO_VOLUNTEER_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) }))
+  }, [supabaseNotifications, notificationState])
 
   const availablePickups = useMemo(
     () =>
@@ -62,7 +105,17 @@ export function VolunteerProvider({ children }) {
 
   // Each action returns the store result: { ok: true } or { ok: false, error }.
   const acceptPickup = useCallback(
-    (pickupId) => {
+    async (pickupId) => {
+      if (isSupabaseConfigured) {
+        const serviceResult = await acceptPickupTask(pickupId)
+        if (serviceResult.ok) {
+          return { ok: true }
+        }
+        console.warn(
+          '[VolunteerContext] Supabase acceptPickup failed, falling back to demo store:',
+          serviceResult.error,
+        )
+      }
       const pickup = pickups.find((item) => item.id === pickupId)
       if (!pickup) {
         return { ok: false, error: 'This pickup has already been taken' }
@@ -75,13 +128,47 @@ export function VolunteerProvider({ children }) {
     [pickups, profile.id],
   )
 
-  const markCollected = useCallback((taskId) => advanceTask(taskId, 'Collected', profile.id), [profile.id])
+  const markCollected = useCallback(
+    async (taskId) => {
+      if (isSupabaseConfigured) {
+        const serviceResult = await advancePickup(taskId, 'Collected')
+        if (serviceResult.ok) {
+          return { ok: true }
+        }
+        console.warn(
+          '[VolunteerContext] Supabase advancePickup failed, falling back to demo store:',
+          serviceResult.error,
+        )
+      }
+      return advanceTask(taskId, 'Collected', profile.id)
+    },
+    [profile.id],
+  )
 
-  const markDelivered = useCallback((taskId) => advanceTask(taskId, 'Delivered', profile.id), [profile.id])
+  const markDelivered = useCallback(
+    async (taskId) => {
+      if (isSupabaseConfigured) {
+        const serviceResult = await advancePickup(taskId, 'Delivered')
+        if (serviceResult.ok) {
+          return { ok: true }
+        }
+        console.warn(
+          '[VolunteerContext] Supabase advancePickup failed, falling back to demo store:',
+          serviceResult.error,
+        )
+      }
+      return advanceTask(taskId, 'Delivered', profile.id)
+    },
+    [profile.id],
+  )
 
-  const markNotificationRead = useCallback((id) => markStoreNotificationRead(DEMO_VOLUNTEER_ID, id), [])
+  const markNotificationRead = useCallback((id) => isSupabaseConfigured
+    ? markStoreNotificationReadInDb(id)
+    : markStoreNotificationRead(DEMO_VOLUNTEER_ID, id), [])
 
-  const markAllNotificationsRead = useCallback(() => markAllStoreNotificationsRead(DEMO_VOLUNTEER_ID), [])
+  const markAllNotificationsRead = useCallback(() => isSupabaseConfigured
+    ? markAllStoreNotificationsReadInDb()
+    : markAllStoreNotificationsRead(DEMO_VOLUNTEER_ID), [])
 
   const updateProfile = useCallback((changes) => {
     setProfile((prev) => ({ ...prev, ...changes }))

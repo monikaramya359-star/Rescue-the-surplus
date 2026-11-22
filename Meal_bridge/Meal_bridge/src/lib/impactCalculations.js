@@ -1,9 +1,11 @@
 /**
  * Pure impact calculations. Inputs are donation/delivery records; no React, no fetching.
- * Assumption for the demo: one meal weighs 0.2 kg.
+ * All conversion constants come from IMPACT_CONFIG (impactConfig.js).
  */
 
-export const KG_PER_MEAL = 0.2;
+import { IMPACT_CONFIG } from './impactConfig.js';
+
+export const KG_PER_MEAL = IMPACT_CONFIG.kgPerMeal;
 
 // Completed deliveries only: a delivery counts for impact once its status is Delivered.
 export function isCompletedDelivery(record) {
@@ -98,4 +100,66 @@ export function donorContributions(deliveries, donors) {
 export function formatMonthLabel(yyyyMm) {
   const [year, month] = yyyyMm.split('-').map(Number);
   return new Date(year, month - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+}
+
+const DAY_MS = 86400000;
+const PERIOD_DAYS = { week: 7, month: 30 };
+
+// Timestamp used to place a listing in a period: completion time, falling back to last update.
+export function listingTimestamp(listing) {
+  const raw = listing.completedAt ?? listing.updatedAt ?? null;
+  if (!raw) return null;
+  const ms = new Date(raw).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+// period: 'week' (last 7 days) | 'month' (last 30 days) | 'all' (no cutoff).
+// Records with no valid timestamp are excluded from week/month and kept for 'all'.
+export function filterByPeriod(listings, period, now) {
+  const days = PERIOD_DAYS[period];
+  if (!days) return listings;
+  const cutoff = now - days * DAY_MS;
+  return listings.filter((listing) => {
+    const ts = listingTimestamp(listing);
+    return ts !== null && ts >= cutoff;
+  });
+}
+
+// Impact totals from Delivered listings only.
+// kgRescued = Kg-unit quantity + Meals-unit quantity × gramsPerMeal ÷ 1000 (Packets excluded).
+// meals = kgRescued × 1000 ÷ gramsPerMeal.
+// co2eKg = kgRescued × kgCo2ePerKgFood.
+// Values are unrounded; round for display only.
+export function computeImpact(listings, period = 'all', now = Date.now()) {
+  const delivered = filterByPeriod((listings || []).filter(isCompletedDelivery), period, now);
+
+  const kgRescued = delivered.reduce((sum, listing) => {
+    const qty = Number(listing.quantity) || 0;
+    if (listing.unit === 'Kg') return sum + qty;
+    if (listing.unit === 'Meals') return sum + (qty * IMPACT_CONFIG.gramsPerMeal) / 1000;
+    return sum;
+  }, 0);
+  const meals = (kgRescued * 1000) / IMPACT_CONFIG.gramsPerMeal;
+  const co2eKg = kgRescued * IMPACT_CONFIG.kgCo2ePerKgFood;
+  const completedPickups = delivered.length;
+  const activeDonors = countDistinct(
+    delivered.filter((listing) => listing.donorId != null),
+    'donorId',
+  );
+
+  return {
+    kgRescued,
+    meals,
+    co2eKg,
+    completedPickups,
+    activeDonors,
+    isEmpty: completedPickups === 0,
+    formulas: {
+      kgRescued: `Kg rescued = Delivered Kg quantity + (Delivered Meals quantity × ${IMPACT_CONFIG.gramsPerMeal} g ÷ 1000)`,
+      meals: `Meals = kg rescued × 1000 ÷ ${IMPACT_CONFIG.gramsPerMeal} g per meal`,
+      co2e: `CO2e avoided = kg rescued × ${IMPACT_CONFIG.kgCo2ePerKgFood} kg CO2e per kg food`,
+      completedPickups: 'Completed pickups = count of listings with status Delivered in the period',
+      activeDonors: 'Active donors = distinct donors with a Delivered listing in the period',
+    },
+  };
 }

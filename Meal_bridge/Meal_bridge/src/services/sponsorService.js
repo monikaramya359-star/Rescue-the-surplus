@@ -3,6 +3,7 @@
  */
 
 import { wasteAvoidedKg } from '../lib/impactCalculations';
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 
 export const SPONSOR_ASSUMPTION =
   'Demo assumption: one meal weighs 0.2 kg. Estimated food waste avoided = successfully delivered meals × 0.2 kg. Figures are synthetic and illustrative.';
@@ -67,6 +68,58 @@ const report = {
 };
 
 export async function getSponsorData() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('sponsor_records')
+      .select('period_start,donations,successful_donations,meals_rescued,waste_avoided_kg')
+      .order('period_start', { ascending: true })
+    if (!error && data) {
+      const monthlyTrend = data.map((row) => ({
+        month: row.period_start?.slice(0, 7),
+        meals: row.meals_rescued,
+        wasteKg: row.waste_avoided_kg,
+        donations: row.donations,
+        successfulDonations: row.successful_donations,
+      }))
+      const mealsRescued = sum(monthlyTrend, 'meals')
+      const totalDonations = sum(monthlyTrend, 'donations')
+      const successfulDonations = sum(monthlyTrend, 'successfulDonations')
+      const successRate = totalDonations ? Math.round((successfulDonations / totalDonations) * 100) : 0
+      const summary = {
+        mealsRescued,
+        wasteAvoidedKg: wasteAvoidedKg(mealsRescued),
+        restaurantsParticipating: 0,
+        ngosSupported: 0,
+        totalDonations,
+        successfulDonations,
+        successRate,
+      }
+      return {
+        assumption: SPONSOR_ASSUMPTION,
+        summary,
+        monthlyTrend,
+        report: {
+          title: 'Rescue the Surplus - CSR Impact Report',
+          period: data.length ? `${data[0].period_start} to ${data[data.length - 1].period_start}` : 'No reporting period',
+          generatedOn: new Date().toISOString().slice(0, 10),
+          preparedFor: 'Sponsor',
+          assumption: SPONSOR_ASSUMPTION,
+          highlights: [
+            { label: 'Meals rescued', value: mealsRescued },
+            { label: 'Food waste avoided (kg)', value: summary.wasteAvoidedKg },
+            { label: 'Donation success rate (%)', value: successRate },
+          ],
+          monthlyRows: monthlyTrend.map((row) => ({
+            Month: row.month,
+            Donations: row.donations,
+            'Successful donations': row.successfulDonations,
+            'Meals rescued': row.meals,
+            'Waste avoided (kg)': row.wasteKg,
+          })),
+        },
+      }
+    }
+  }
   await new Promise((resolve) => setTimeout(resolve, 300));
   return {
     assumption: SPONSOR_ASSUMPTION,

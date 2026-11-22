@@ -10,3 +10,22 @@ html {
 body {
   @apply bg-cream font-sans text-stone-800 antialiased;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .donor-print-area,
+  .donor-print-area * {
+    visibility: visible;
+  }
+
+  .donor-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none;
+  }
+}

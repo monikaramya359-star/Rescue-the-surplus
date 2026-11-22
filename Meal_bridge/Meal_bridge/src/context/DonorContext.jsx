@@ -12,6 +12,17 @@ import {
   recordDonationPosted,
   subscribeNotifications,
 } from '../lib/demoStore.js'
+import { isSupabaseConfigured } from '../lib/supabase.js'
+import {
+  cancelListing,
+  createListing,
+  getDonorListings,
+  getNotifications,
+  markNotificationRead as markStoreNotificationReadInDb,
+  markAllNotificationsRead as markAllStoreNotificationsReadInDb,
+  normalizeListing,
+  updateListing,
+} from '../services/mealService.js'
 
 const DonorContext = createContext(null)
 
@@ -19,18 +30,56 @@ export function DonorProvider({ children }) {
   const notificationState = useSyncExternalStore(subscribeNotifications, getState)
   const [donations, setDonations] = useState(seedDonations)
   const [profile, setProfile] = useState(donorProfile)
+  const [supabaseNotifications, setSupabaseNotifications] = useState(null)
 
   useEffect(() => {
     checkDeadlines()
   }, [])
 
-  // Notifications come from the store, already limited to this donor.
-  const notifications = useMemo(
-    () => getNotificationsFor(DEMO_DONOR_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) })),
-    [notificationState],
-  )
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+    let active = true
+    async function refresh() {
+      const [listingResult, notificationsResult] = await Promise.all([getDonorListings(), getNotifications()])
+      if (!active) return
+      if (listingResult.ok && listingResult.data) setDonations(listingResult.data.map(normalizeListing))
+      if (notificationsResult.ok && notificationsResult.data) setSupabaseNotifications(notificationsResult.data)
+    }
+    refresh()
+    const timer = setInterval(refresh, 12000)
+    return () => { active = false; clearInterval(timer) }
+  }, [])
 
-  const addDonation = useCallback((values) => {
+  // Notifications come from the store, already limited to this donor.
+  const notifications = useMemo(() => {
+    if (isSupabaseConfigured && supabaseNotifications) {
+      return supabaseNotifications.map((n) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        read: n.is_read,
+        time: formatNotificationTime(n.created_at),
+      }))
+    }
+    return getNotificationsFor(DEMO_DONOR_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) }))
+  }, [supabaseNotifications, notificationState])
+
+  const addDonation = useCallback(async (values) => {
+    if (isSupabaseConfigured) {
+      const result = await createListing({
+        ...values,
+        imageUrl: values.imageUrl || null,
+      })
+      // No demo fallback here: a failed save must not look like a success.
+      // The caller keeps the form values and shows the message.
+      if (!result.ok) {
+        return {
+          ok: false,
+          message: result.message || 'We could not post this listing. Your details are still here, so please try again.',
+        }
+      }
+      return { ok: true, id: result.data.id, ...values }
+    }
     const donation = {
       ...values,
       id: 'd-' + Date.now(),
@@ -42,12 +91,38 @@ export function DonorProvider({ children }) {
     return donation
   }, [profile])
 
-  const updateDonation = useCallback((id, changes) => {
+  const updateDonation = useCallback(async (id, changes) => {
+    if (isSupabaseConfigured) {
+      const result = await updateListing(id, {
+        ...changes,
+        imageUrl: changes.imageUrl || null,
+      })
+      if (result.ok) {
+        return result
+      }
+      console.warn(
+        '[DonorContext] Supabase updateListing failed, falling back to demo store:',
+        result.error,
+      )
+    }
     setDonations((prev) => prev.map((d) => (d.id === id ? { ...d, ...changes } : d)))
+    return { ok: true }
   }, [])
 
-  const cancelDonation = useCallback((id) => {
+  const cancelDonation = useCallback(async (id) => {
+    if (isSupabaseConfigured) {
+      const result = await cancelListing(id)
+      if (result.ok) {
+        setDonations((prev) => prev.map((d) => (d.id === id ? { ...d, status: 'Cancelled' } : d)))
+        return result
+      }
+      console.warn(
+        '[DonorContext] Supabase cancelListing failed, falling back to demo store:',
+        result.error,
+      )
+    }
     setDonations((prev) => prev.map((d) => (d.id === id ? { ...d, status: 'Cancelled' } : d)))
+    return { ok: true }
   }, [])
 
   // Demo progression only. Status changes to Delivered/Collected happen here
@@ -56,9 +131,13 @@ export function DonorProvider({ children }) {
     setDonations((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)))
   }, [])
 
-  const markNotificationRead = useCallback((id) => markStoreNotificationRead(DEMO_DONOR_ID, id), [])
+  const markNotificationRead = useCallback((id) => isSupabaseConfigured
+    ? markStoreNotificationReadInDb(id)
+    : markStoreNotificationRead(DEMO_DONOR_ID, id), [])
 
-  const markAllNotificationsRead = useCallback(() => markAllStoreNotificationsRead(DEMO_DONOR_ID), [])
+  const markAllNotificationsRead = useCallback(() => isSupabaseConfigured
+    ? markAllStoreNotificationsReadInDb()
+    : markAllStoreNotificationsRead(DEMO_DONOR_ID), [])
 
   const updateProfile = useCallback((changes) => {
     setProfile((prev) => ({ ...prev, ...changes }))

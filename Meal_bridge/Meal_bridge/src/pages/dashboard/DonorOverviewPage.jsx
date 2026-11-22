@@ -1,4 +1,4 @@
-import { CheckCircle2, ClipboardList, Clock, Plus, Utensils } from 'lucide-react'
+import { CheckCircle2, ClipboardList, Clock, Plus, ShieldCheck, Utensils } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../components/dashboard/PageHeader.jsx'
 import StatCard from '../../components/dashboard/StatCard.jsx'
@@ -15,6 +15,32 @@ export default function DonorOverviewPage() {
   return (
     <>
       <PageHeader title="Overview" description="Your food rescue activity at a glance." />
+
+      <section className="mb-8 rounded-2xl border border-primary-100 bg-amber-50 p-6 shadow-sm sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-primary-800">Why list surplus food?</h2>
+            <p className="mt-2 text-sm text-stone-600">
+              Every kilogram you post becomes a meal for someone who needs it. Track what you rescue, avoid waste,
+              and build a verifiable impact record — all in under a minute per listing.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-stone-500">
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
+              No cost to donate
+            </span>
+            <span className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-green-600" aria-hidden="true" />
+              Post in under 60s
+            </span>
+            <span className="flex items-center gap-2">
+              <Utensils className="h-4 w-4 text-green-600" aria-hidden="true" />
+              Meals tracked per listing
+            </span>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={ClipboardList} label="Total donations" value={stats.totalDonations} />

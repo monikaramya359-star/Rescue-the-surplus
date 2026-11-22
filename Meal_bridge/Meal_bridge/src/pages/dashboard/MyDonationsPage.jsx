@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Ban, CalendarClock, Clock, MapPin, PlusCircle, Scale, Pencil } from 'lucide-react'
+import { Ban, CalendarClock, Clock, MapPin, PlusCircle, Scale, Pencil, ShieldCheck, Utensils } from 'lucide-react'
 import { useDonor } from '../../context/DonorContext.jsx'
 import { DONATION_STATUSES } from '../../data/donorData.js'
 import { formatDateTime, formatQuantity } from '../../lib/formatters.js'
@@ -9,6 +9,8 @@ import StatusBadge from '../../components/dashboard/StatusBadge.jsx'
 import FoodImage from '../../components/ui/FoodImage.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
+import { downloadCsv } from '../../lib/reportExport.js'
+import { IMPACT_CONFIG, impactFromDeliveredListings } from '../../lib/impactConfig.js'
 
 const ALL_FILTER = 'All'
 const EDITABLE_STATUSES = ['Active', 'Claimed']
@@ -53,12 +55,26 @@ export default function MyDonationsPage() {
     setCancelTarget(null)
   }
 
+  const handleDownloadImpact = () => {
+    const impact = impactFromDeliveredListings(
+      donations.map((donation) => ({ ...donation, status: donation.status })),
+    )
+    downloadCsv('donor-impact-report.csv', [{
+      'Meals saved': impact.mealsSaved,
+      'Kg rescued': impact.kgRescued,
+      'CO2e avoided (kg)': impact.kgCo2eAvoided,
+      'Completed pickups': impact.completedPickups,
+      'Calculation': `${IMPACT_CONFIG.gramsPerMeal} g/meal; ${IMPACT_CONFIG.kgCo2ePerKgFood} kg CO2e/kg`,
+    }])
+  }
+
   return (
     <div className="min-h-full bg-cream-50 px-4 py-8 sm:px-6 lg:px-8">
       <PageHeader
         title="My Donations"
         description="Track each listing from posting to delivery."
         action={
+          <div className="flex flex-wrap gap-3">
           <Link
             to="/dashboard/donor/add"
             className="inline-flex items-center justify-center gap-2 rounded-full bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-primary-600/25 transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
@@ -66,8 +82,38 @@ export default function MyDonationsPage() {
             <PlusCircle className="h-4 w-4" aria-hidden="true" />
             Add food
           </Link>
+          <Button type="button" variant="outline" onClick={handleDownloadImpact}>
+            Download impact
+          </Button>
+          </div>
         }
       />
+
+      <section className="mb-8 rounded-2xl border border-primary-100 bg-amber-50 p-6 shadow-sm sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-primary-800">Why track your donations?</h2>
+            <p className="mt-2 text-sm text-stone-600">
+              Keep a verifiable record of every kilogram you rescue. Each delivered listing counts toward your impact,
+              and you can download a shareable impact report at any time.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-stone-500">
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
+              Verified impact metrics
+            </span>
+            <span className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-green-600" aria-hidden="true" />
+              Downloadable CSV report
+            </span>
+            <span className="flex items-center gap-2">
+              <Utensils className="h-4 w-4 text-green-600" aria-hidden="true" />
+              Meals counted per listing
+            </span>
+          </div>
+        </div>
+      </section>
 
       <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter donations by status">
         {filters.map((status) => {

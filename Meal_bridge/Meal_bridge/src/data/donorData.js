@@ -19,6 +19,16 @@ export const STORAGE_CONDITIONS = [
   'Frozen',
 ]
 
+export const ALLERGEN_OPTIONS = [
+  'None declared',
+  'Contains gluten',
+  'Contains dairy',
+  'Contains nuts',
+  'Contains eggs',
+  'Contains soy',
+  'Contains sesame',
+]
+
 export const seedDonations = [
   {
     id: 'd-101',

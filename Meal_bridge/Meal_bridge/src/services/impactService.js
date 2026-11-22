@@ -12,6 +12,7 @@ import {
 } from '../lib/impactCalculations';
 import { FOOD_CATEGORIES } from '../data/donorData';
 import { getState } from '../lib/demoStore';
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 
 export const IMPACT_ASSUMPTION =
   'Demo assumption: one meal weighs 0.2 kg. Estimated waste avoided = successfully delivered meals × 0.2 kg. Only completed deliveries are counted.';
@@ -86,6 +87,52 @@ function ensureEntry(list, name, idPrefix, extra = {}) {
 // SUPABASE SEAM: the data source for getImpactData will become Supabase queries (food_claims and
 // impact_records joined to donors and receivers). Keep the same return shape so the dashboard does not change.
 export async function getImpactData() {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('impact_records')
+      .select('id,claim_id,donor_id,receiver_id,category,quantity,unit,estimated_waste_avoided_kg,completed_at')
+      .order('completed_at', { ascending: false })
+    if (!error && data) {
+      const deliveries = data.map((row) => ({
+        id: row.id,
+        donationId: row.claim_id,
+        donorId: row.donor_id,
+        receiverId: row.receiver_id,
+        category: row.category,
+        unit: row.unit,
+        quantity: row.quantity,
+        status: 'Delivered',
+        completedAt: row.completed_at,
+        month: row.completed_at?.slice(0, 7),
+      }))
+      const donations = deliveries.map((row) => ({
+        id: row.donationId,
+        donorId: row.donorId,
+        category: row.category,
+        status: 'Delivered',
+      }))
+      const allDonors = Array.from(new Map(deliveries.map((row) => [row.donorId, { id: row.donorId, name: 'Donor', type: 'Organization' }])).values())
+      const summary = computeImpactSummary(deliveries, donations)
+      return {
+        summary,
+        deliveredListings: deliveries,
+        mealsOverTime: mealsOverTime(deliveries),
+        categoryBreakdown: donationsByCategory(donations),
+        monthlyWaste: monthlyWasteAvoided(deliveries),
+        donorContributions: donorContributions(deliveries, allDonors),
+        recentSuccessfulDonations: deliveries.slice(0, 5).map((record) => ({
+          id: record.id,
+          donorName: 'Donor',
+          category: record.category,
+          quantity: record.quantity,
+          unit: record.unit,
+          completedAt: record.completedAt,
+          receiverId: record.receiverId,
+        })),
+        kgPerMeal: KG_PER_MEAL,
+      }
+    }
+  }
   await new Promise((resolve) => setTimeout(resolve, 300));
 
   // Copies, so session donors/receivers never change the seed lists.
@@ -128,6 +175,7 @@ export async function getImpactData() {
 
   return {
     summary,
+    deliveredListings: allDeliveries,
     mealsOverTime: mealsOverTime(allDeliveries),
     categoryBreakdown: donationsByCategory(donations),
     monthlyWaste: monthlyWasteAvoided(allDeliveries),

@@ -1,11 +1,14 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DemoProvider } from './context/DemoContext.jsx'
+import { AuthProvider } from './context/AuthContext.jsx'
+import ProtectedRoute from './components/auth/ProtectedRoute.jsx'
 import SiteLayout from './components/layout/SiteLayout.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import RoleSelectionPage from './pages/RoleSelectionPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import { DonorProvider } from './context/DonorContext.jsx'
 import DashboardLayout from './components/dashboard/DashboardLayout.jsx'
 import DonorOverviewPage from './pages/dashboard/DonorOverviewPage.jsx'
@@ -18,6 +21,7 @@ import { ReceiverProvider } from './context/ReceiverContext.jsx'
 import ReceiverLayout from './components/dashboard/ReceiverLayout.jsx'
 import ReceiverOverviewPage from './pages/receiver/ReceiverOverviewPage.jsx'
 import AvailableFoodPage from './pages/receiver/AvailableFoodPage.jsx'
+import ListingDetailPage from './pages/receiver/ListingDetailPage.jsx'
 import MyClaimsPage from './pages/receiver/MyClaimsPage.jsx'
 import DeliveryHistoryPage from './pages/receiver/DeliveryHistoryPage.jsx'
 import ReceiverNotificationsPage from './pages/receiver/ReceiverNotificationsPage.jsx'
@@ -44,8 +48,9 @@ import SponsorPage from './pages/sponsor/SponsorPage.jsx'
 
 export default function App() {
   return (
-    <DemoProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <DemoProvider>
         <Routes>
           <Route element={<SiteLayout />}>
             <Route index element={<LandingPage />} />
@@ -53,16 +58,21 @@ export default function App() {
             <Route path="register/:role" element={<RegisterPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="reset-password" element={<ResetPasswordPage />} />
             <Route path="impact" element={<ImpactDashboardPage />} />
-            <Route path="sponsor" element={<SponsorPage />} />
+            <Route path="sponsor" element={
+              <ProtectedRoute role="sponsor"><SponsorPage /></ProtectedRoute>
+            } />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
           <Route
             path="/dashboard/donor"
             element={
-              <DonorProvider>
-                <DashboardLayout />
-              </DonorProvider>
+              <ProtectedRoute role="donor">
+                <DonorProvider>
+                  <DashboardLayout />
+                </DonorProvider>
+              </ProtectedRoute>
             }
           >
             <Route index element={<DonorOverviewPage />} />
@@ -76,13 +86,16 @@ export default function App() {
           <Route
             path="/dashboard/receiver"
             element={
-              <ReceiverProvider>
-                <ReceiverLayout />
-              </ReceiverProvider>
+              <ProtectedRoute role="receiver">
+                <ReceiverProvider>
+                  <ReceiverLayout />
+                </ReceiverProvider>
+              </ProtectedRoute>
             }
           >
             <Route index element={<ReceiverOverviewPage />} />
             <Route path="available" element={<AvailableFoodPage />} />
+            <Route path="listings/:id" element={<ListingDetailPage />} />
             <Route path="claims" element={<MyClaimsPage />} />
             <Route path="history" element={<DeliveryHistoryPage />} />
             <Route path="notifications" element={<ReceiverNotificationsPage />} />
@@ -92,9 +105,11 @@ export default function App() {
           <Route
             path="/dashboard/volunteer"
             element={
-              <VolunteerProvider>
-                <VolunteerLayout />
-              </VolunteerProvider>
+              <ProtectedRoute role="volunteer">
+                <VolunteerProvider>
+                  <VolunteerLayout />
+                </VolunteerProvider>
+              </ProtectedRoute>
             }
           >
             <Route index element={<VolunteerOverviewPage />} />
@@ -107,9 +122,11 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <AdminProvider>
-                <AdminLayout />
-              </AdminProvider>
+              <ProtectedRoute role="admin">
+                <AdminProvider>
+                  <AdminLayout />
+                </AdminProvider>
+              </ProtectedRoute>
             }
           >
             <Route index element={<AdminOverviewPage />} />
@@ -121,7 +138,8 @@ export default function App() {
             <Route path="reports" element={<AdminReportsPage />} />
           </Route>
         </Routes>
-      </BrowserRouter>
-    </DemoProvider>
+        </DemoProvider>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

@@ -8,6 +8,12 @@ import { useDemo } from '../context/DemoContext.jsx'
 import { validateLogin } from '../lib/validation.js'
 import { loginUser } from '../services/authService.js'
 
+const ROLE_OPTIONS = [
+  { value: 'donor', label: 'Donor (post surplus food)' },
+  { value: 'receiver', label: 'Receiver (claim and receive food)' },
+  { value: 'volunteer', label: 'Volunteer (pick up and deliver)' },
+]
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -17,6 +23,7 @@ export default function LoginPage() {
   const [values, setValues] = useState(() => ({
     email: location.state?.email ?? '',
     password: '',
+    role: 'donor',
   }))
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
@@ -47,9 +54,21 @@ export default function LoginPage() {
     }
 
     setSubmitting(true)
-    await loginUser(values)
-    showToast('Demo login successful - no account data is stored yet.')
-    navigate('/')
+    const result = await loginUser({ ...values, role: values.role })
+    setSubmitting(false)
+    if (!result.ok) {
+      setErrors((prev) => ({ ...prev, password: result.error }))
+      return
+    }
+    showToast('Login successful.')
+    const role = result.user.role || result.user.user_metadata?.role
+    if (role === 'admin') navigate('/admin', { replace: true })
+    else if (role === 'sponsor') navigate('/sponsor', { replace: true })
+    else if (['donor', 'receiver', 'volunteer'].includes(role)) {
+      navigate(`/dashboard/${role}`, { replace: true })
+    } else {
+      navigate('/', { replace: true })
+    }
   }
 
   const passwordToggle = (
@@ -129,6 +148,25 @@ export default function LoginPage() {
               Forgot password?
             </Link>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="login-role" className="block text-sm font-semibold text-stone-800 mb-2">
+            Log in as
+          </label>
+          <select
+            id="login-role"
+            name="role"
+            value={values.role}
+            onChange={(event) => setValues((prev) => ({ ...prev, role: event.target.value }))}
+            className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            {ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <Button

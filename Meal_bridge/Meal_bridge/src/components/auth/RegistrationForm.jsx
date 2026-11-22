@@ -43,10 +43,15 @@ export default function RegistrationForm({ role }) {
     }
 
     setSubmitting(true)
-    await registerUser(role.key, values)
+    const result = await registerUser(role.key, values)
+    setSubmitting(false)
+    if (!result.ok) {
+      setErrors((prev) => ({ ...prev, email: result.error }))
+      return
+    }
     navigate('/login', {
       state: {
-        message: 'Account created (demo). You can now log in.',
+        message: 'Account created. You can now log in.',
         email: values.email,
       },
     })

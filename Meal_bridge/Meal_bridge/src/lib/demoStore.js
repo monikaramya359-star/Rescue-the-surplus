@@ -350,6 +350,10 @@ export function claimListing(listingId, quantity) {
   if (!listing) {
     return { ok: false, error: 'This listing is no longer available' }
   }
+  // Auto-expire: a listing past its pickup deadline cannot be claimed.
+  if (new Date(listing.pickupDeadline).getTime() <= Date.now()) {
+    return { ok: false, error: 'This pickup deadline has passed' }
+  }
   const remaining = listing.quantity - listing.claimedQuantity
   if (remaining <= 0) {
     return { ok: false, error: 'This listing has already been fully claimed' }

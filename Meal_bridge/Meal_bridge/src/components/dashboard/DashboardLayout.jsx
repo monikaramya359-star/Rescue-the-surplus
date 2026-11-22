@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Leaf, Menu, X } from 'lucide-react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import DashboardSidebar from './DashboardSidebar.jsx'
+import { logoutUser } from '../../services/authService.js'
 
 export default function DashboardLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -25,8 +26,8 @@ export default function DashboardLayout() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawerOpen])
 
-  // Demo logout: just leave the dashboard. No session is created or cleared.
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutUser()
     navigate('/login', { replace: true })
   }
 

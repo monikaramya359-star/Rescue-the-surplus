@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { receiverProfile, seedClaims } from '../data/receiverData.js'
 import {
-  claimListing,
+  claimListing as claimListingInStore,
   DEMO_RECEIVER_ID,
   formatNotificationTime,
   getNotificationsFor,
@@ -13,6 +13,17 @@ import {
   subscribe,
   subscribeNotifications,
 } from '../lib/demoStore.js'
+import { isSupabaseConfigured } from '../lib/supabase.js'
+import {
+  claimListing,
+  getAvailableListings,
+  getReceiverClaims,
+  getNotifications,
+  markNotificationRead as markStoreNotificationReadInDb,
+  markAllNotificationsRead as markAllStoreNotificationsReadInDb,
+  normalizeClaim,
+  normalizeListing,
+} from '../services/mealService.js'
 
 const ReceiverContext = createContext(null)
 
@@ -43,6 +54,8 @@ export function getListingStatus(listing, now) {
 export function ReceiverProvider({ children }) {
   const demoState = useSyncExternalStore(subscribe, getState)
   const listingsState = demoState.listings
+  const [supabaseListings, setSupabaseListings] = useState(null)
+  const [supabaseNotifications, setSupabaseNotifications] = useState(null)
   const [claims, setClaims] = useState(seedClaims)
   const notificationState = useSyncExternalStore(subscribeNotifications, getState)
   const [profile, setProfile] = useState(receiverProfile)
@@ -53,24 +66,84 @@ export function ReceiverProvider({ children }) {
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+    let active = true
+    async function refresh() {
+      const [listingsResult, claimsResult, notificationsResult] = await Promise.all([
+        getAvailableListings(),
+        getReceiverClaims(),
+        getNotifications(),
+      ])
+      if (!active) return
+      if (listingsResult.ok && listingsResult.data) setSupabaseListings(listingsResult.data.map(normalizeListing))
+      if (claimsResult.ok && claimsResult.data) setClaims(claimsResult.data.map(normalizeClaim))
+      if (notificationsResult.ok && notificationsResult.data) setSupabaseNotifications(notificationsResult.data)
+    }
+    refresh()
+    const timer = setInterval(refresh, 12000)
+    return () => { active = false; clearInterval(timer) }
+  }, [])
+
   // Notifications come from the store, already limited to this receiver.
-  const notifications = useMemo(
-    () => getNotificationsFor(DEMO_RECEIVER_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) })),
-    [notificationState],
-  )
+  const notifications = useMemo(() => {
+    if (isSupabaseConfigured && supabaseNotifications) {
+      return supabaseNotifications.map((n) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        read: n.is_read,
+        time: formatNotificationTime(n.created_at),
+      }))
+    }
+    return getNotificationsFor(DEMO_RECEIVER_ID).map((n) => ({ ...n, time: formatNotificationTime(n.createdAt) }))
+  }, [supabaseNotifications, notificationState])
 
   const listings = useMemo(
     () =>
-      listingsState.map((listing) => ({
+      (supabaseListings || listingsState).map((listing) => ({
         ...listing,
         availableQuantity: listing.quantity - listing.claimedQuantity,
         status: getListingStatus(listing, now),
       })),
-    [listingsState, now],
+    [supabaseListings, listingsState, now],
   )
 
   const claimFood = useCallback(
-    (donationId, quantity) => {
+    async (donationId, quantity) => {
+      if (isSupabaseConfigured) {
+        const serviceResult = await claimListing(donationId, quantity)
+        if (serviceResult.ok) {
+          // Refresh claims from the demo store so the UI reflects the claim immediately.
+          const fresh = getState()
+          const listing = fresh.listings.find((item) => item.id === donationId)
+          if (listing) {
+            const claim = {
+              id: 'c-' + Date.now(),
+              donationId,
+              foodName: listing.foodName,
+              donorName: listing.donorName,
+              image: listing.image,
+              quantityClaimed: quantity,
+              unit: listing.unit,
+              pickupLocation: listing.pickupLocation,
+              storage: listing.storage,
+              allergens: listing.allergens,
+              pickupDeadline: listing.pickupDeadline,
+              claimedAt: new Date().toISOString(),
+              status: 'Claimed',
+            }
+            setClaims((prev) => [claim, ...prev])
+            recordFoodClaimed(claim, listing)
+            return { ok: true, claim }
+          }
+          return { ok: true }
+        }
+        console.warn(
+          '[ReceiverContext] Supabase claimListing failed, falling back to demo store:',
+          serviceResult.error,
+        )
+      }
       if (!Number.isInteger(quantity) || quantity < 1) {
         return { ok: false, error: 'Enter a whole number of at least 1' }
       }
@@ -83,7 +156,7 @@ export function ReceiverProvider({ children }) {
       }
 
       // The store re-checks the remaining quantity against its latest state.
-      const claimResult = claimListing(donationId, quantity)
+      const claimResult = claimListingInStore(donationId, quantity)
       if (!claimResult.ok) {
         return claimResult
       }
@@ -131,9 +204,13 @@ export function ReceiverProvider({ children }) {
     )
   }, [])
 
-  const markNotificationRead = useCallback((id) => markStoreNotificationRead(DEMO_RECEIVER_ID, id), [])
+  const markNotificationRead = useCallback((id) => isSupabaseConfigured
+    ? markStoreNotificationReadInDb(id)
+    : markStoreNotificationRead(DEMO_RECEIVER_ID, id), [])
 
-  const markAllNotificationsRead = useCallback(() => markAllStoreNotificationsRead(DEMO_RECEIVER_ID), [])
+  const markAllNotificationsRead = useCallback(() => isSupabaseConfigured
+    ? markAllStoreNotificationsReadInDb()
+    : markAllStoreNotificationsRead(DEMO_RECEIVER_ID), [])
 
   const updateProfile = useCallback((changes) => {
     setProfile((prev) => ({ ...prev, ...changes }))

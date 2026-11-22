@@ -1,0 +1,17 @@
+{
+  "name": "Rescue the Surplus",
+  "short_name": "MealBridge",
+  "description": "Connect surplus food with people who need it.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#166534",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

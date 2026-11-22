@@ -1,16 +1,11 @@
 // Rule-based food matching. Pure JavaScript with no imports, so it can run under plain Node.
 // Distances are great-circle estimates between the listing pickup point and the receiver location.
 
+import { MATCH_WEIGHTS } from './matching.js'
+
 const EARTH_RADIUS_KM = 6371
 const MS_PER_MINUTE = 60000
 const MIN_MINUTES_TO_COLLECT = 30
-
-const WEIGHTS = {
-  distance: 0.35,
-  quantity: 0.25,
-  deadline: 0.2,
-  category: 0.2,
-}
 
 function toRadians(degrees) {
   return (degrees * Math.PI) / 180
@@ -48,7 +43,7 @@ export function scoreMatch(listing, receiver, now = Date.now()) {
   })
 
   // Hard filters, in order.
-  if (listing.status !== 'Active') {
+  if (listing.status !== 'Active' && listing.status !== 'Available') {
     return excluded('Listing is not active')
   }
 
@@ -84,10 +79,9 @@ export function scoreMatch(listing, receiver, now = Date.now()) {
   reasons.push(`${distanceKm.toFixed(1)} km away`)
 
   // Quantity fit. Meal listings are compared with receiver capacity; other units are not converted.
-  let need = remaining
   let quantityComponent
   if (listing.unit === 'Meals') {
-    need = receiver.dailyCapacityMeals
+    const need = receiver.dailyCapacityMeals
     if (remaining <= need) {
       quantityComponent = 1
       reasons.push(`Receiver can take all ${remaining} meals`)
@@ -126,10 +120,10 @@ export function scoreMatch(listing, receiver, now = Date.now()) {
   }
 
   const weighted =
-    WEIGHTS.distance * distanceComponent +
-    WEIGHTS.quantity * quantityComponent +
-    WEIGHTS.deadline * deadlineComponent +
-    WEIGHTS.category * categoryComponent
+    (MATCH_WEIGHTS.distance / 100) * distanceComponent +
+    (MATCH_WEIGHTS.quantityFit / 100) * quantityComponent +
+    (MATCH_WEIGHTS.timing / 100) * deadlineComponent +
+    (MATCH_WEIGHTS.need / 100) * categoryComponent
 
   return {
     eligible: true,

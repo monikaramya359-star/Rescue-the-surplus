@@ -31,8 +31,12 @@ export default function ForgotPasswordPage() {
     }
 
     setSubmitting(true)
-    await requestPasswordReset(email)
+    const result = await requestPasswordReset(email)
     setSubmitting(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
     setSent(true)
   }
 
